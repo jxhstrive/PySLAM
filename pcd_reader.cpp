@@ -44,28 +44,6 @@ POINT_CLOUD_REGISTER_POINT_STRUCT (PointIMO,
                                    (uint8_t, mirrorid, mirrorid)
 )
 
-struct PointFusion
-{
-  PCL_ADD_POINT4D;
-  float intensity;
-  uint16_t laserid;
-  double timeoffset;
-  float yawangle;
-  uint8_t mirrorid;
-  PCL_MAKE_ALIGNED_OPERATOR_NEW     // make sure our new allocators are aligned
-};
-
-POINT_CLOUD_REGISTER_POINT_STRUCT (PointIMO,
-                                   (float, x, x)
-                                   (float, y, y)
-                                   (float, z, z)
-                                   (float, intensity, intensity)
-                                   (uint16_t, laserid, laserid)
-                                   (double, timeoffset, timeoffset)
-                                   (float, yawangle, yawangle)
-                                   (uint8_t, mirrorid, mirrorid)
-)
-
 struct PointMAP
 {
   PCL_ADD_POINT4D;
