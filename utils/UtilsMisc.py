@@ -92,6 +92,13 @@ class PoseGraphResultSaver:
             filename = "pose" + self.seq_idx + "unoptimized.csv"
             filename = os.path.join(self.save_dir, filename)
             np.savetxt(filename, self.pose_list, delimiter=",")
+    
+    def saveUnoptimizedPoseGraphResultNoWrite(self, cur_pose, cur_node_idx):
+        # save 
+        self.pose_list = np.vstack((self.pose_list, np.reshape(cur_pose, (-1, 16))))
+    
+    def getPoseList(self):
+        return self.pose_list
 
     def saveOptimizedPoseGraphResult(self, cur_node_idx, graph_optimized):
         filename = "pose" + self.seq_idx + "optimized_" + str(getUnixTime()) + ".csv"

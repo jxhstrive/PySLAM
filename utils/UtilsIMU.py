@@ -139,14 +139,28 @@ class IMUPose:
         ref_entry = self.find_closest_entry(ref_timestamp)
         query_entry = self.find_closest_entry(query_timestamp)
         if ref_entry is not None and query_entry is not None:
+            # x, y, z = self._gps_to_enu(ref_entry['Longitude[°]'], ref_entry['Latitude[°]'], ref_entry['Altitude[m]'],
+            #                     query_entry['Longitude[°]'], query_entry['Latitude[°]'], query_entry['Altitude[m]'])
+            # yaw = query_entry['Orientation[°]'] - ref_entry['Orientation[°]']
+            # pitch = query_entry['Pitch angle[°]'] - ref_entry['Pitch angle[°]']
+            # roll = query_entry['Roll angle[°]'] - ref_entry['Roll angle[°]']
+            # enu2ref = create_rotation_matrix(ref_entry['Orientation[°]'], ref_entry['Pitch angle[°]'], ref_entry['Roll angle[°]'])
+            # ref_trans = np.dot(enu2ref, np.array([x, y, z]))
+            # return create_transformation_matrix(-yaw, -pitch, -roll, -ref_trans[0], -ref_trans[1], -ref_trans[2])
+
             x, y, z = self._gps_to_enu(ref_entry['Longitude[°]'], ref_entry['Latitude[°]'], ref_entry['Altitude[m]'],
                                 query_entry['Longitude[°]'], query_entry['Latitude[°]'], query_entry['Altitude[m]'])
             yaw = query_entry['Orientation[°]'] - ref_entry['Orientation[°]']
             pitch = query_entry['Pitch angle[°]'] - ref_entry['Pitch angle[°]']
             roll = query_entry['Roll angle[°]'] - ref_entry['Roll angle[°]']
             enu2ref = create_rotation_matrix(ref_entry['Orientation[°]'], ref_entry['Pitch angle[°]'], ref_entry['Roll angle[°]'])
+            ref_speed = 5/18 * ref_entry['Speed[KPH]']
+            query_speed = 5/18 * query_entry['Speed[KPH]']
+            delta_time = (query_dt - ref_dt).total_seconds()
             ref_trans = np.dot(enu2ref, np.array([x, y, z]))
-            return create_transformation_matrix(-yaw, -pitch, -roll, -ref_trans[0], -ref_trans[1], -ref_trans[2])
+            move_dist = abs(0.5*(ref_speed + query_speed)*delta_time)
+            gain = move_dist/np.linalg.norm(ref_trans)
+            return create_transformation_matrix(-yaw, -pitch, -roll, -ref_trans[0]*gain, -ref_trans[1]*gain, -ref_trans[2]*gain)
         else:
             return None
 

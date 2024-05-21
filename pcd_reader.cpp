@@ -44,6 +44,28 @@ POINT_CLOUD_REGISTER_POINT_STRUCT (PointIMO,
                                    (uint8_t, mirrorid, mirrorid)
 )
 
+struct PointFusion
+{
+  PCL_ADD_POINT4D;
+  float intensity;
+  uint16_t laserid;
+  double timeoffset;
+  float yawangle;
+  uint8_t mirrorid;
+  PCL_MAKE_ALIGNED_OPERATOR_NEW     // make sure our new allocators are aligned
+};
+
+POINT_CLOUD_REGISTER_POINT_STRUCT (PointIMO,
+                                   (float, x, x)
+                                   (float, y, y)
+                                   (float, z, z)
+                                   (float, intensity, intensity)
+                                   (uint16_t, laserid, laserid)
+                                   (double, timeoffset, timeoffset)
+                                   (float, yawangle, yawangle)
+                                   (uint8_t, mirrorid, mirrorid)
+)
+
 struct PointMAP
 {
   PCL_ADD_POINT4D;
@@ -164,6 +186,52 @@ py::array_t<float> read_pcd_with_excluded_area(const std::string &filename,
         if(pt.z>ceiling_height)
             continue;
         filter_idx.push_back(i);
+    }
+
+    // Create a NumPy array with the appropriate shape and data type
+    auto result = py::array_t<float>(std::vector<size_t>{filter_idx.size(), 4});
+
+    // Access NumPy array's buffer for direct writing
+    auto rinfo = result.request();
+    float *result_ptr = (float *)rinfo.ptr;
+
+    // Copy data from the PCL point cloud to the NumPy array
+    for (size_t i = 0; i < filter_idx.size(); i++) {
+        result_ptr[i * 4 + 0] = cloud.points[filter_idx[i]].x;
+        result_ptr[i * 4 + 1] = cloud.points[filter_idx[i]].y;
+        result_ptr[i * 4 + 2] = cloud.points[filter_idx[i]].z;
+        result_ptr[i * 4 + 3] = cloud.points[filter_idx[i]].intensity;
+    }
+
+    return result;
+}
+
+py::array_t<float> read_pcd_with_excluded_area_read_ratio(const std::string &filename,
+                                                        py::array_t<double> &excluded_area,
+                                                        double ceiling_height,
+                                                        double read_ratio) {
+    pcl::PointCloud<PointIMO> cloud;
+
+    if (pcl::io::loadPCDFile<PointIMO>(filename, cloud) == -1) {
+        throw std::runtime_error("Error loading PCD file!");
+    }
+    if(read_ratio>1){
+        throw std::runtime_error("read_ratio 取值范围(0, 1)! ");
+    }
+
+    std::vector<int> rand_idx;
+    int max_idx = cloud.points.size() - 1;
+    select_random(max_idx, max_idx*read_ratio, rand_idx);
+
+    Eigen::MatrixXd ex_area = numpy_to_eigen(excluded_area);
+    std::vector<size_t> filter_idx;
+    for(size_t i=0; i<rand_idx.size(); ++i){
+        PointIMO pt = cloud.points[rand_idx[i]];
+        if(pt.x>ex_area(0, 0)&&pt.x<ex_area(0, 1)&&pt.y>ex_area(1, 0)&&pt.y<ex_area(1, 1))
+            continue;
+        if(pt.z>ceiling_height)
+            continue;
+        filter_idx.push_back(rand_idx[i]);
     }
 
     // Create a NumPy array with the appropriate shape and data type
@@ -543,6 +611,7 @@ PYBIND11_MODULE(imo_pcd_reader, m) {
     m.doc() = "Module for reading PCD files with attributes using PyBind11";
     m.def("read_pcd", &read_pcd, "Reads a PCD file and returns a NumPy array");
     m.def("read_pcd_with_excluded_area", &read_pcd_with_excluded_area, "Reads a PCD file and returns a NumPy array outside the excluded area");
+    m.def("read_pcd_with_excluded_area_read_ratio", &read_pcd_with_excluded_area_read_ratio, "Reads a PCD file and returns a NumPy array outside the excluded area and downsample to given ratio");
     m.def("save_MAP_pcd", &save_MAP_pcd, "Save a MAP PCD file from NumPy arrays");
     m.def("performNDT", &performNDT, "Perform NDT using NumPy arrays");
     m.def("assign_colors", &assign_colors, "Assign colors for point cloud from images");
