@@ -467,7 +467,7 @@ void generate_2d_map(const std::string &pcd_filename,
     std::vector<std::vector<float>> b_grid(grid_height, std::vector<float>(grid_width, 0.0));
     std::vector<std::vector<float>> intensity_grid(grid_height, std::vector<float>(grid_width, 0.0));
     std::vector<std::vector<float>> height_grid(grid_height, std::vector<float>(grid_width, nanValue));
-    std::vector<std::vector<size_t>> height_grid_c(grid_height, std::vector<float>(grid_width, 0));
+    std::vector<std::vector<size_t>> height_grid_c(grid_height, std::vector<size_t>(grid_width, 0));
     size_t valid_pixel_c(0);
     for (const auto& point : cloud->points) {
         int x_index = int((point.x - min_x) / grid_resolution);

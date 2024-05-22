@@ -41,7 +41,7 @@ parser.add_argument("--keep_mid_pcds", action="store_true", default=False,
 args = parser.parse_args()
 
 # dataset
-correct_pcd_channel = "lidarTop"
+correct_pcd_channel = "lidarFusion_pcd"
 dummy_pcdname = "dummy.pcd"
 data_list_file_dir = glob.glob(os.path.join(args.slam_paras_file_dir, "*_pcs_data_path.csv"))[0]
 df = pd.read_csv(data_list_file_dir)
