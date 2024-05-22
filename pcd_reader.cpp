@@ -467,6 +467,7 @@ void generate_2d_map(const std::string &pcd_filename,
     std::vector<std::vector<float>> b_grid(grid_height, std::vector<float>(grid_width, 0.0));
     std::vector<std::vector<float>> intensity_grid(grid_height, std::vector<float>(grid_width, 0.0));
     std::vector<std::vector<float>> height_grid(grid_height, std::vector<float>(grid_width, nanValue));
+    std::vector<std::vector<size_t>> height_grid_c(grid_height, std::vector<float>(grid_width, 0));
     size_t valid_pixel_c(0);
     for (const auto& point : cloud->points) {
         int x_index = int((point.x - min_x) / grid_resolution);
@@ -482,8 +483,9 @@ void generate_2d_map(const std::string &pcd_filename,
                 valid_pixel_c++;
                 height_grid[y_index][x_index] = point.z;
             }else{
-                height_grid[y_index][x_index] = 0.5*(height_grid[y_index][x_index] + point.z);
+                height_grid[y_index][x_index] = (height_grid_c[y_index][x_index]*height_grid[y_index][x_index] + point.z)/(height_grid_c[y_index][x_index]+1);
             }
+            height_grid_c[y_index][x_index]++;
             if(r_grid[y_index][x_index]==0.0){
                 r_grid[y_index][x_index] = point.r;
             }else{

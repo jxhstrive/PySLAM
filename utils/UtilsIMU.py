@@ -159,7 +159,11 @@ class IMUPose:
             delta_time = (query_dt - ref_dt).total_seconds()
             ref_trans = np.dot(enu2ref, np.array([x, y, z]))
             move_dist = abs(0.5*(ref_speed + query_speed)*delta_time)
-            gain = move_dist/np.linalg.norm(ref_trans)
+            trans_norm = np.linalg.norm(ref_trans)
+            if np.isclose(trans_norm, 0, 1e-4):
+                gain = 1
+            else:
+                gain = move_dist/trans_norm
             return create_transformation_matrix(-yaw, -pitch, -roll, -ref_trans[0]*gain, -ref_trans[1]*gain, -ref_trans[2]*gain)
         else:
             return None

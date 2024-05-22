@@ -366,6 +366,9 @@ for scan_paths in pcd_segments:
         longitude_list = []
         altitude_list = []
         for scan_path in scan_paths:
+            filename = os.path.basename(scan_path)
+            parts = filename.split('_')
+            query_timestamp = parts[0] + '_' + parts[1]
             Latitude, Longitude, Altitude = pose.getGPS(query_timestamp)
             if Latitude is not None:
                 latitude_list.append(Latitude)
