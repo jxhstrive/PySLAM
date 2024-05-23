@@ -184,6 +184,52 @@ py::array_t<float> read_pcd_with_excluded_area(const std::string &filename,
     return result;
 }
 
+py::array_t<float> read_pcd_with_excluded_area_read_ratio(const std::string &filename,
+                                                        py::array_t<double> &excluded_area,
+                                                        double ceiling_height,
+                                                        double read_ratio) {
+    pcl::PointCloud<PointIMO> cloud;
+
+    if (pcl::io::loadPCDFile<PointIMO>(filename, cloud) == -1) {
+        throw std::runtime_error("Error loading PCD file!");
+    }
+    if(read_ratio>1){
+        throw std::runtime_error("read_ratio 取值范围(0, 1)! ");
+    }
+
+    std::vector<int> rand_idx;
+    int max_idx = cloud.points.size() - 1;
+    select_random(max_idx, max_idx*read_ratio, rand_idx);
+
+    Eigen::MatrixXd ex_area = numpy_to_eigen(excluded_area);
+    std::vector<size_t> filter_idx;
+    for(size_t i=0; i<rand_idx.size(); ++i){
+        PointIMO pt = cloud.points[rand_idx[i]];
+        if(pt.x>ex_area(0, 0)&&pt.x<ex_area(0, 1)&&pt.y>ex_area(1, 0)&&pt.y<ex_area(1, 1))
+            continue;
+        if(pt.z>ceiling_height)
+            continue;
+        filter_idx.push_back(rand_idx[i]);
+    }
+
+    // Create a NumPy array with the appropriate shape and data type
+    auto result = py::array_t<float>(std::vector<size_t>{filter_idx.size(), 4});
+
+    // Access NumPy array's buffer for direct writing
+    auto rinfo = result.request();
+    float *result_ptr = (float *)rinfo.ptr;
+
+    // Copy data from the PCL point cloud to the NumPy array
+    for (size_t i = 0; i < filter_idx.size(); i++) {
+        result_ptr[i * 4 + 0] = cloud.points[filter_idx[i]].x;
+        result_ptr[i * 4 + 1] = cloud.points[filter_idx[i]].y;
+        result_ptr[i * 4 + 2] = cloud.points[filter_idx[i]].z;
+        result_ptr[i * 4 + 3] = cloud.points[filter_idx[i]].intensity;
+    }
+
+    return result;
+}
+
 py::array_t<float> assign_colors(py::array_t<float> &coords,
                                  std::vector<std::string> &camera_names,
                                  std::unordered_map<std::string, std::string> &img_file_pth,
@@ -421,6 +467,7 @@ void generate_2d_map(const std::string &pcd_filename,
     std::vector<std::vector<float>> b_grid(grid_height, std::vector<float>(grid_width, 0.0));
     std::vector<std::vector<float>> intensity_grid(grid_height, std::vector<float>(grid_width, 0.0));
     std::vector<std::vector<float>> height_grid(grid_height, std::vector<float>(grid_width, nanValue));
+    std::vector<std::vector<size_t>> height_grid_c(grid_height, std::vector<size_t>(grid_width, 0));
     size_t valid_pixel_c(0);
     for (const auto& point : cloud->points) {
         int x_index = int((point.x - min_x) / grid_resolution);
@@ -436,8 +483,9 @@ void generate_2d_map(const std::string &pcd_filename,
                 valid_pixel_c++;
                 height_grid[y_index][x_index] = point.z;
             }else{
-                height_grid[y_index][x_index] = 0.5*(height_grid[y_index][x_index] + point.z);
+                height_grid[y_index][x_index] = (height_grid_c[y_index][x_index]*height_grid[y_index][x_index] + point.z)/(height_grid_c[y_index][x_index]+1);
             }
+            height_grid_c[y_index][x_index]++;
             if(r_grid[y_index][x_index]==0.0){
                 r_grid[y_index][x_index] = point.r;
             }else{
@@ -543,6 +591,7 @@ PYBIND11_MODULE(imo_pcd_reader, m) {
     m.doc() = "Module for reading PCD files with attributes using PyBind11";
     m.def("read_pcd", &read_pcd, "Reads a PCD file and returns a NumPy array");
     m.def("read_pcd_with_excluded_area", &read_pcd_with_excluded_area, "Reads a PCD file and returns a NumPy array outside the excluded area");
+    m.def("read_pcd_with_excluded_area_read_ratio", &read_pcd_with_excluded_area_read_ratio, "Reads a PCD file and returns a NumPy array outside the excluded area and downsample to given ratio");
     m.def("save_MAP_pcd", &save_MAP_pcd, "Save a MAP PCD file from NumPy arrays");
     m.def("performNDT", &performNDT, "Perform NDT using NumPy arrays");
     m.def("assign_colors", &assign_colors, "Assign colors for point cloud from images");

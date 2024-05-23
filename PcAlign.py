@@ -9,6 +9,7 @@ import argparse
 import glob
 from datetime import datetime
 import shutil
+from joblib import Parallel, delayed
 
 import json
 import numpy as np
@@ -40,11 +41,26 @@ parser.add_argument("--keep_mid_pcds", action="store_true", default=False,
 args = parser.parse_args()
 
 # dataset
+correct_pcd_channel = "lidarFusion_pcd"
+dummy_pcdname = "dummy.pcd"
 data_list_file_dir = glob.glob(os.path.join(args.slam_paras_file_dir, "*_pcs_data_path.csv"))[0]
 df = pd.read_csv(data_list_file_dir)
-scan_paths = df['File Path'].tolist()
+tmp_scan_paths = df['File Path'].tolist()
+scan_paths = []
+scan_names = []
+for pc_path in tmp_scan_paths:
+    dirname, pcdname = os.path.split(pc_path)
+    dirname, channel_name = os.path.split(dirname)
+    parts = pcdname.split("_")
+    search_str = parts[0] + "_" + parts[1]
+    data_list = glob.glob(os.path.join(dirname, correct_pcd_channel, search_str+"*.pcd"))
+    if len(data_list) == 1:
+        pcdname = os.path.basename(data_list[0])
+    else:
+        pcdname = dummy_pcdname
+    scan_paths.append(os.path.join(dirname, correct_pcd_channel, pcdname))
+    scan_names.append(pcdname)
 num_frames = len(scan_paths)
-scan_names = [os.path.basename(path) for path in scan_paths]
 
 pose_file_dir = glob.glob(os.path.join(args.slam_paras_file_dir, "pose*unoptimized.csv"))[0]
 dirname, filename = os.path.split(pose_file_dir)
@@ -115,6 +131,22 @@ def assign_colors_from_image(pc_coords, pc_path):
     colors = imo_pcd_reader.assign_colors(pc_coords, camera_names, img_dir_dict, calib_intri_dict, calib_extri_dict)
     return colors
 
+def cloud_transform(mat, scan_path, out_name, save_dir, excluded_area, ceiling_height):
+    if out_name != dummy_pcdname:
+        scan = imo_pcd_reader.read_pcd_with_excluded_area(scan_path, excluded_area, ceiling_height)
+        coord = scan[:, :3]
+        intensities = scan[:, -1]
+        new_column = np.ones((coord.shape[0], 1))
+        aug_coord = np.hstack((coord, new_column))
+        trans_coord = mat.dot(aug_coord.T)
+        out_coord = trans_coord.T[:, :3]
+        if args.no_assign_colors:
+            rgbs = np.ones((coord.shape[0], 3))
+        else:
+            rgbs = assign_colors_from_image(coord, scan_path)
+        save_pcd_path = os.path.join(save_dir, out_name)
+        imo_pcd_reader.save_MAP_pcd(out_coord, rgbs, intensities, save_pcd_path)
+
 all_matrices = read_csv_to_matrices(pose_file_dir)
 excluded_area = np.array([[-1, 3], [-1, 1]])
 ceiling_height = 2
@@ -138,20 +170,8 @@ geohash_file = os.path.basename(data_list_file_dir)
 parts = geohash_file.split('_')
 fname_prefix = parts[0] + '_' + parts[1] + '_' + parts[2] + '_' + parts[3]
 
-for mat, scan_path, out_name in zip(all_matrices, tqdm(scan_paths), scan_names):
-    scan = imo_pcd_reader.read_pcd_with_excluded_area(scan_path, excluded_area, ceiling_height)
-    coord = scan[:, :3]
-    intensities = scan[:, -1]
-    new_column = np.ones((coord.shape[0], 1))
-    aug_coord = np.hstack((coord, new_column))
-    trans_coord = mat.dot(aug_coord.T)
-    out_coord = trans_coord.T[:, :3]
-    if args.no_assign_colors:
-        rgbs = np.ones((coord.shape[0], 3))
-    else:
-        rgbs = assign_colors_from_image(coord, scan_path)
-    save_pcd_path = os.path.join(save_dir, out_name)
-    imo_pcd_reader.save_MAP_pcd(out_coord, rgbs, intensities, save_pcd_path)
+Parallel(n_jobs=-1)(delayed(cloud_transform)(mat, scan_path, out_name, save_dir, excluded_area, ceiling_height) 
+                                                for mat, scan_path, out_name in zip(all_matrices, scan_paths, scan_names))
 
 # save whole map to pcd
 pcd_list = glob.glob(os.path.join(save_dir, "*.pcd"))
@@ -174,7 +194,7 @@ local2global_pose = os.path.join(mapdir, fname_prefix + "_local2global_pose.csv"
 copy_file(pose_file_dir, local2global_pose)
 with open(pcs_data_path, "w", newline="") as csvfile:
     writer = csv.writer(csvfile)
-    for pc_path in scan_paths:
+    for pc_path in tmp_scan_paths:
         dirname, pcdname = os.path.split(pc_path)
         dirname, channel_name = os.path.split(dirname)
         dirname, scene_name = os.path.split(dirname)
